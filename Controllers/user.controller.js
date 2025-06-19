@@ -1,4 +1,4 @@
-const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 const userModel = require("../Models/user.model");
 const { generateOtp } = require("../Utils/generateOtp");
 const { sendOtpEmail } = require("../Services/emailService");
@@ -37,6 +37,28 @@ const verifyOtp = async (req, res) => {
     user.otp = null;
     user.otpExpires = null;
     await user.save();
+    const accessToken = jwt.sign(
+      { userId: user._id },
+      process.env.ACCESS_TOKEN_SECRET,
+      { expiresIn: "15m" }
+    );
+    const refreshToken = jwt.sign(
+      { userId: user._id },
+      process.env.REFRESH_TOKEN_SECRET,
+      { expiresIn: "7d" }
+    );
+    res.cookie("accessToken", accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 15 * 60 * 1000,
+    });
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
     return res.status(200).json({ message: "OTP verified successfully", user });
   } catch (error) {
     res.status(500).json({ message: "Internet Server Error" });
@@ -87,9 +109,27 @@ const register = async (req, res) => {
       speciality,
       fellowship,
     });
-    console.log(newUser);
     await newUser.save();
     return res.status(201).json({ message: "Registration successfull" });
+  } catch (error) {
+    res.status(500).json({ message: "Internet Server Error" });
+  }
+};
+
+const logout = (req, res) => {
+  try {
+    res.clearCookie("accessToken", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+    });
+
+    res.clearCookie("refreshToken", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+    });
+    return res.status(200).json({ message: "Logged out successfully" });
   } catch (error) {
     res.status(500).json({ message: "Internet Server Error" });
   }
@@ -99,4 +139,5 @@ module.exports = {
   login,
   register,
   verifyOtp,
+  logout,
 };
